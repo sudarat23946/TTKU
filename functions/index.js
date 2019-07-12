@@ -10,15 +10,16 @@ const runtimeOpts = {
   timeoutSeconds: 4,
   memory: "2GB"
 };
-
+// Imports the Google Cloud client libraries
 const vision = require('@google-cloud/vision');
+// Creates a client
 const client = new vision.ImageAnnotatorClient();
 
 //line header
 const LINE_MESSAGING_API = 'https://api.line.me/v2/bot/message';
 const LINE_HEADER = {
   'Content-Type': 'application/json',
-  'Authorization': `Bearer EsuoA3hG6K+c35X0r3ezNdsS4GSw4uBDCPE3gk7RwXIb7mmNAYrZKJCaFjVnqWb+egF5K9wLRJE4NIO84HPYhfiuWeFG1Yky48I8FviGlab/HNciJcgiMuJi3FtA/0iFxkbhwBdtEOGeioPqP5mhIgdB04t89/1O/w1cDnyilFU=`
+  'Authorization': `Bearer xZSkzpAsqBfWxjK56LJ2WqUbrGibDkeRnxxQ2dTW+yLSTOjUSt4iXEJzJZf6da6wRLgxWBqcbnF0wZZtpiyPRO9rJRx8X5w6llWssZ/hJGycAz8G5qJq9dDnwEGlhB2angmKLKLXkuRDcaBvl1MJdAdB04t89/1O/w1cDnyilFU=`
 };
 
 exports.webhook = functions.region(region).runWith(runtimeOpts)
@@ -44,7 +45,7 @@ exports.webhook = functions.region(region).runWith(runtimeOpts)
 const postToDialogflow = req => {
   req.headers.host = "bots.dialogflow.com";
   return request.post({
-    uri: "https://bots.dialogflow.com/line/4ab99b2f-3a13-4a28-94d1-beed1fbcbe63/webhook",
+    uri: "https://bots.dialogflow.com/line/c4d7dad8-2c1c-4622-8a6d-9a77ed6bee2f/webhook",
     headers: req.headers,
     body: JSON.stringify(req.body)
   });
@@ -76,7 +77,7 @@ const doImage = async (event) => {
   await fs.writeFileSync(tempLocalFile, buffer);
 
   // กำหนดชื่อ bucket ใน Cloud Storage for Firebase
-  const bucket = admin.storage().bucket('my-cloud-246402.appspot.com');
+  const bucket = admin.storage().bucket('gs://ttku-246402.appspot.com');
 
   // อัพโหลดไฟล์ขึ้น Cloud Storage for Firebase
   await bucket.upload(tempLocalFile, {
@@ -92,53 +93,52 @@ const doImage = async (event) => {
   // ตอบกลับเพื่อ handle UX เนื่องจากทั้งดาวน์โหลดและอัพโหลดต้องใช้เวลา
   reply(event.replyToken, {
     type: 'text',
-    text: 'บันทึกรูปเรียบร้อย'
+    text: 'เค้าได้รูปแล้ว ขอเวลาเค้าแปปนึงนะ'
   });
 }
 
-exports.logoDetection = functions.region(region).runWith(runtimeOpts)
+exports.landmarkDetection = functions.region(region).runWith(runtimeOpts)
   .storage.object()
   .onFinalize(async (object) => {
   const fileName = object.name // ดึงชื่อไฟล์มา
   const userId = fileName.split('.')[0] // แยกชื่อไฟล์ออกมา ซึ่งมันก็คือ userId
-  
+
   // ทำนายโลโกที่อยู่ในภาพด้วย Cloud Vision API
-  const [result] = await client.logoDetection(`gs://${object.bucket}/${fileName}`);
-  const logos = result.logoAnnotations;
+  const [result] = await client.landmarkDetection(`gs://${object.bucket}/${fileName}`)
+  const landmarks = result.landmarkAnnotations;
   
   // เอาผลลัพธ์มาเก็บใน array ซึ่งเป็นโครงสร้างของ Quick Reply
   let itemArray = []
-  logos.forEach(logo => {
-    if (logo.score >= 0.7) { // ค่าความแม่นยำของการทำนายต้องได้ตั้งแต่ 70% ขึ้นไป
+  landmarks.forEach(landmark => {
+    if (landmark.score >= 0.7) {
       itemArray.push({
         type: 'action',
         action: {
-          type: 'postback', // action ประเภท postback
-          label: logo.description, // ชื่อที่จะแสดงในปุ่ม Quick Reply
-          data: `team=${logo.description}`, // ส่งข้อมูลทีมกลับไปแบบลับๆ
-          displayText: logo.description // ชื่อที่จะถูกส่งเข้าห้องแชทหลังจากคลิกปุ่ม Quick Reply
+          type: 'message',
+          label: landmark.description,
+          data: `team=${landmark.description}`,
+          text: landmark.description
         }
       });
     }
   })
   
   // กำหนดตัวแปรมา 2 ตัว
-  let msg = '';
-  let quickItems = null;
+  let msg = ''
+  let quickItems = null
   
   // ตรวจสอบว่ามีผลลัพธ์การทำนายหรือไม่
   if (itemArray.length > 0) {
-    msg = 'ผลทำนายมีดังนี้';
-    quickItems = { items: itemArray };
+    msg = 'ที่นั้น คือ.... : '
+    quickItems = { items: itemArray }
   } else {
-    msg = 'ไม่พบโลโกในภาพ ลองส่งรูปมาใหม่ซิ';
-    quickItems = null;
+    msg = 'เค้าไม่รู้จักอะ T^T เค้าขอโตด'
+    quickItems = null
   }
   
   // ส่งข้อความหาผู้ใช้ว่าพบโลโกหรือไม่ พร้อม Quick Reply(กรณีมีผลการทำนาย)
   push(userId, msg, quickItems)
-});
-
+})
 
 const push = (userId, msg, quickItems) => {
   return request.post({
@@ -148,8 +148,8 @@ const push = (userId, msg, quickItems) => {
       to: userId,
       messages: [{
         type: "text",
-        text: msg,
-        quickReply: quickItems
+        text: msg + quickItems.items[0].action.text
+        //quickReply: 
       }]
     })
   })
